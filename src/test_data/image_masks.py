@@ -296,9 +296,9 @@ class SpectralImageGenerator():
 
         figure, axes = plt.subplots(3, len(self.masks),
                                     figsize=[len(self.masks) * 2.5, 10],
-                                    layout='constrained', sharey=True)
+                                    layout='tight', sharey=True)
 
-        figure.text(0, 0.97,
+        figure.text(0, 0.967,
                     'Raw randomnly generated masks for the `n-1` masks',
                     fontsize=16)
         axes[0, 0].set_ylabel(r'sample y ($\mu$m)')
@@ -307,7 +307,7 @@ class SpectralImageGenerator():
             axes[0, i].set_title(f'Layer {i + 1}')
         axes[0, -1].set_axis_off()
 
-        figure.text(0, 0.64,
+        figure.text(0, 0.645,
                     'Normalized generated masks for each of the `n` masks',
                     fontsize=16)
         axes[1, 0].set_ylabel(r'sample y ($\mu$m)')
