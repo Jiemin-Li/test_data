@@ -3,6 +3,7 @@ import numpy as np
 import random
 from scipy.interpolate import CubicHermiteSpline, RegularGridInterpolator
 from scipy.ndimage import zoom
+import time
 
 
 # Generic helper functions
@@ -338,7 +339,7 @@ def fermi(binding_energy, temperature=300, fermi_energy=0, zero_offset=0):
 
     kb = 8.617333262e-05  # Boltzmans constant in eV/K
     amplitude = 1 / (np.exp(-(binding_energy - fermi_energy) / (kb *
-                                                                temperature)) + 1)
+                                                                temperature))+1)
     amplitude = (amplitude + zero_offset) / (1 + zero_offset)
 
     return amplitude
@@ -690,3 +691,80 @@ class Band:
                       fermi(Eb))
 
         return intensity
+
+
+default_symmetry_energies = {'band1': [[-2, 3, 2], [-3, 7, 6]],
+                             'band2': [[1, 9, 10], [2, 10, 6]],
+                             'band3': [[10, -1, 0], [10, 2, 3]],
+                             'band4': [[5.5, 2, 4], [6, 2, 0]]}
+
+
+class Bands:
+    """A sub-class that holds information about a set of bands.
+
+    Parameters
+    ----------
+    symmetry_energies : {'str':[[float,float,float],[float,float,float]],...}
+        A Dictionary mapping 'band names' to a two element list of 3 element
+        lists providing the binding energies for each of the $k_{z}$ direction
+        high symmetry planes for each band. Each list has binding energies
+        (in eV) for each of the high symmetry points in each $k_{z}$ high
+        symmetry plane. These positions (in-plane coordinates) are:
+            [0,0],
+            [(in-plane lattice constant),
+             (in_plane lattice constant)/sqrt(3)]
+            [(in-plane lattice constant),0]
+        NOTE: It is recommended, but not required, that the 'band names' follow
+        the structure 'bandx' where x is an integer counting number.
+
+    lattice_constants : float, optional.
+            The lattice constants (in-plane, out-of-plane) for the hexagonal
+            brillouin zone in Angstroms, default is approximately equal to that
+            for graphene (2.5, 3.4).
+    g_width, l_width : float or [float, ...], optional.
+            The widths of the gaussian (g_width) and lorentzian(l_width)
+            broadening of the spectra (in eV). If a list is given then it must
+            have the same length as there are elements in symmetry_energies.
+
+    Attributes
+    ----------
+    many : Band class objects
+        Band class objects for each of the bands provided in symmetry_energies
+        with the attribute name being the 'key' from this dictionary.
+    """
+
+    def __init__(self, symmetry_energies, lattice_constants,
+                 g_width=0.4, l_width=0.3):
+
+        if isinstance(g_width, (int, float)):  # create a list
+            g_width = [g_width] * len(symmetry_energies)
+
+        if isinstance(l_width, (int, float)):  # create a list
+            l_width = [l_width] * len(symmetry_energies)
+
+        for width in [g_width, l_width]:
+            if not isinstance(width, list):
+                raise ValueError(f'During initialization of a `Bands` class '
+                                 f'expected `g_width` and `l_width` to be int,'
+                                 f' float, or list but instead got: '
+                                 f'{type(g_width)=} and {type(l_width)=}')
+            elif len(width) != len(symmetry_energies):
+                raise ValueError(f'During initialization of a `Bands` class '
+                                 f'expected `g_width` and `l_width` to have '
+                                 f'the same length as `symmetry_point_energies'
+                                 f' but instead got {len(g_width)=}, '
+                                 f'{len(l_width)=}, and '
+                                 f'{len(symmetry_energies)=}')
+
+        num_bands = len(symmetry_energies)
+        for i, (band, point_energies) in enumerate(symmetry_energies.items()):
+            start_time = time.time()
+            print(f'Working on {band} which is {i + 1} of {num_bands}')
+            setattr(self, band,
+                    Band(symmetry_point_energies=point_energies,
+                         lattice_constants=lattice_constants,
+                         g_width=g_width[i], l_width=l_width[i]))
+            band_time = (time.time() - start_time)
+            print(f'Time for {band} was {round(band_time)} s')
+            print(f'Remaining time estimate: {round(band_time * 
+                                                    (num_bands - i - 1))} s')
