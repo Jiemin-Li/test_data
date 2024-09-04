@@ -381,3 +381,312 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     kz *= 1E-10  # convert from m^(-1) to Ang^(-1)
 
     return kz
+
+
+class Band:
+    """Holds information associated with generating specific electron bands.
+
+    This class holds attributes that allow for calculation of a simulated
+    electron band. It assumes a hexagonal crystal structure with the shorter
+    primitive translation vector along the $k_{x}$ axis.
+
+    NOTE: These bands take a while to initialize (~ 1 minute) as we generate
+        a 4D intensity spectra and then fit a 4D function to this. This is
+        done at initialization so that calls to self.spectra() can return
+        large, high resolution N-D spectra quickly during use.
+
+    Attributes
+    ----------
+    symmetry_point_energies : [[float,float,float], [float,float,float]]
+            A two element list of 3 element lists providing the binding
+            energies for each of the $k_{z}$ direction high symmetry planes.
+            Each list has binding energies (in eV) for each of the high
+            symmetry points in each $k_{z}$ high symmetry plane. These
+            positions (in-plane coordinates) are:
+                [0,0],
+                [(in-plane lattice constant),
+                 (in_plane lattice constant)/sqrt(3)]
+                [(in-plane lattice constant),0]
+    lattice_constants : (float, float), optional.
+        The in-plane lattice constants (in-plane, out-of-plane) for the
+        hexagonal brillouin zone in Angstroms, default is approximately
+        equal to that for graphene (2.5, 3.4).
+    symmetry_lines : [{'kx':kx(ky) function, 'E':E(ky) function}, {...}].
+        A list of two dictionaries (one for each non x-axis parallel high
+        symmetry direction) that holds functions mapping $k_{x}$ (under the
+        'kx' key) and Binding Energy (under the 'Eb' key) to $k_{y}$
+        respectively.
+
+    Methods
+    -------
+    energy : self.energy(kx, ky, kz)
+        Returns the binding energy of the band for the inputted kx, ky, and kz
+        values.
+    spectra : self.spectra(ranges, noise=0.1, temperature=300)
+        Returns an N-D ARPES spectra of the band.
+
+    """
+
+    def __init__(self, symmetry_point_energies,
+                 lattice_constants=(2.5, 3.4),
+                 g_width=0.4, l_width=0.3):
+        """Initializes the Band class.
+
+        Parameters
+        ----------
+        symmetry_point_energies : [[float,float,float], [float,float,float]]
+            A two element list of 3 element lists providing the binding
+            energies for each of the $k_{z}$ direction high symmetry planes.
+            Each list has binding energies (in eV) for each of the high
+            symmetry points in each $k_{z}$ high symmetry plane. These
+            positions (in-plane coordinates) are:
+                [0,0],
+                [(in-plane lattice constant),
+                 (in_plane lattice constant)/sqrt(3)]
+                [(in-plane lattice constant),0]
+        lattice_constants : (float, float), optional.
+            The in-plane lattice constants (in-plane, out-of-plane) for the
+            hexagonal brillouin zone in Angstroms, default is approximately
+            equal to that for graphene (2.5, 3.4).
+        g_width, l_width : float, optional.
+            The widths of the gaussian (g_width) and lorentzian(l_width)
+            broadening of the spectra (in eV) returned by self.spectra(...).
+        """
+
+        self.symmetry_point_energies = symmetry_point_energies
+        self.lattice_constants = lattice_constants
+        symmetry_lines = [
+            generate_symmetry_lines(energies,
+                                    lattice_constant=lattice_constants[0])
+            for energies in symmetry_point_energies]
+        self.symmetry_lines = symmetry_lines
+
+        BZ_x = (2 * math.pi / lattice_constants[0]) * (1 / 2)
+        BZ_y = 2 * BZ_x / np.sqrt(3)
+        BZ_z = (2 * math.pi / lattice_constants[1]) * (1 / 2)
+        ranges = {'kx': [0, BZ_x + 0.3, 25], 'ky': [0, BZ_y + 0.3, 25],
+                  'kz': [0, BZ_z + 0.3, 25], 'Eb': [12, -0.5, 25]}
+        self._interpolation = self._generate_interpolation(ranges,
+                                                           g_width=g_width,
+                                                           l_width=l_width)
+
+    def energy(self, kx, ky, kz):
+        """
+        Returns the binding energy for the $k_{x}$, $k_{y}$, $k_{z}$ values.
+
+        Used to provide the energy of the band at the given momentum
+        co-ordinates.
+
+        Parameters
+        ----------
+        kx, ky, kz : float, float, float.
+            The kx, ky, and kz values for which the energy is required.
+
+        Returns
+        -------
+        Eb : float
+            The binding energy for the given kx, ky, kz value.
+        """
+
+        reciprocal_constant = 2 * math.pi / self.lattice_constants[1]
+
+        kz_symm_points = [0, reciprocal_constant / 2]
+
+        # shift the z 'origin' to the BZ boundary and into +ve half
+        kz = (abs(kz) + reciprocal_constant / 2)
+        # translate to the first BZ
+        kz = kz % reciprocal_constant
+        # shift the z 'origin' back to the BZ centre
+        kz = abs(kz - reciprocal_constant / 2)
+        # reduce the in-plane constants to the first BZ.
+        reduced = reduce_to_firstBZ([kx, ky],
+                                    lattice_constants=self.lattice_constants[0])
+
+        points = []
+        # for the 2 kz high symmetry points generate an energy
+        for kz_symm, in_plane in zip(kz_symm_points, self.symmetry_lines):
+            # Generate polynomials parallel to the kx axis for the given ky
+            point_i = (in_plane[0]['x'](reduced[1]),
+                       in_plane[0]['Eb'](reduced[1]).astype(float))
+            point_f = (in_plane[1]['x'](reduced[1]),
+                       in_plane[1]['Eb'](reduced[1]).astype(float))
+            if point_i[0] >= point_f[0]:  # solves an edge case
+                points.append([kz_symm, float(in_plane[0]['Eb'](reduced[1]))])
+            else:
+                in_plane_polynomial = generate1Dpoly([point_i, point_f])
+                in_plane_Eb = float(in_plane_polynomial(reduced[0]))
+                points.append([kz_symm, in_plane_Eb])
+
+        polynomial = generate1Dpoly(points)
+        Eb = float(polynomial(kz))
+
+        return Eb
+
+    def spectra(self, ranges, noise=0.04, temperature=300):
+        """ Returns an N-D spectra for the band.
+
+        Generates a spectra for the band based on the input from 'ranges'
+        and with random noise at the level given by 'noise' and the
+        temperature given by 'temperature (which is used to apply the
+        intensity drop across the Fermi level).
+
+        Parameter
+        ---------
+        ranges : {'kx': float or (start, stop, num_steps),
+                  'ky': float or (start, stop, num_steps),
+                  'kz' or 'Eph': float or (start, stop, num_steps),
+                  'Eb': float or (start, stop, num_steps)}
+            A Dictionary providing the constant value, if float, or a
+            (start, stop num_steps) tuple, if a range of values is required,
+            for each of the potential axes of an ARPES spectra. momentum
+            values are in inverse Angstroms and the energies are in eV. If
+            using photon energy ('Eph') instead of kz then the function
+            perpendicular_momentum is used to make the conversion.
+        noise : float, optional.
+            The noise level for the returned spectra.
+        temperature : float, optional.
+            The temperature of the sample (in K) used to generate the intensity
+            drop across the Fermi level.
+
+        Returns
+        -------
+        intensity : numpy.ndarray.
+            A numpy.ndarray holding the given N-D spectra.
+        axes_coords : {'kx': numpy.ndarray, 'ky': numpy.ndarray,
+                       'kz': numpy.ndarray, 'Eb': numpy.ndarray}.
+            The constant value, or range of values, for each of the potential
+            spectral axes ($k_{x}$,$k_{y}$,$k_{z}$ and $E_{b}$)
+        """
+
+        axes = [axis for axis, value in ranges.items()
+                if not isinstance(value, (int, float))]
+        shape = [ranges[axis][2] for axis in axes]
+        axes_coords = {axis: (np.array([float(value)])
+                              if isinstance(value, (int, float))
+                              else np.linspace(*value))
+                       for axis, value in ranges.items()}
+
+        # This next bit is required to deal with arbitrary spectra dimensions
+        values = {axis: array.flatten()  # value lists for each spectra point
+                  for axis, array in zip(axes_coords.keys(),
+                                         np.meshgrid(*axes_coords.values()))}
+        k_para = np.sqrt(np.square(values['kx']) + np.square(values['ky']))
+        if 'Eph' in values.keys():
+            values['kz'] = perpendicular_momentum(photon_energy=values['Eph'],
+                                                  parallel_momentum=k_para,
+                                                  binding_energy=values['Eb'])
+            _ = values.pop('Eph')  # remove the converted Eph values
+            # print(f'{values['kz'] =}')
+
+        coords = [[x, y, z, E] for x, y, z, E in zip(values['kx'], values['ky'],
+                                                     values['kz'], values['Eb'])
+                  ]
+        coords = [reduce_to_firstBZ(coord,
+                                    lattice_constants=self.lattice_constants)
+                  for coord in coords]
+
+        # Intensity interpolation and drop off with increased angle
+        intensity = self._interpolation(coords) * gaussian(k_para, 0,
+                                                           1.25)
+        # add noise with Fermi drop-off.
+        intensity += (noise * np.random.rand(*intensity.shape) *
+                      fermi(values['Eb'], zero_offset=0.2,
+                            temperature=temperature))
+        # add k parallel horizon.
+        m = (2 - 1.7) / (0 - 12)
+        c = 2
+        intensity = np.where(k_para <= m * values['Eb'] + c, intensity,
+                             noise * 0.2 * np.random.rand(*intensity.shape))
+        # reshape from 1D to spectra shape
+        intensity = intensity.reshape(*shape)
+
+        return intensity, axes_coords
+
+    def _generate_interpolation(self, ranges, g_width=0.4, l_width=0.3):
+        """Returns the interpolation function used for spectra calculations.
+
+        Run at instantiation time only, this returns the interpolation
+        function that is used to quickly generate spectra, via self.spectra(),
+        during use.
+
+        Parameter
+        ---------
+        ranges : {'kx': float or (start, stop, num_steps),
+                  'ky': float or (start, stop, num_steps),
+                  'kz': float or (start, stop, num_steps),
+                  'Eb': float or (start, stop, num_steps)}
+            A Dictionary providing the constant value, if float, or a
+            (start, stop num_steps) tuple, if a range of values is required,
+            for each of the potential axes of an ARPES spectra. momentum
+            values are in inverse Angstroms and the energies are in eV.
+
+        g_width, l_width : float, optional.
+            The widths of the gaussian (g_width) and lorentzian(l_width)
+            broadening of the spectra (in eV) returned by self.spectra(...).
+
+        Returns
+        -------
+        interp : scipy.interpolate.RegularGridInterpolator
+            Can be called to provide the intensity at a set of ($k_{x}$,
+            $k_{y}$, $k_{z}$ and $E_{b}$) co-ordinates
+        """
+
+        axes = [axis for axis, value in ranges.items()
+                if not isinstance(value, (int, float))]
+        shape = [ranges[axis][2] for axis in axes]
+        axes_coords = {axis: (np.array([float(value)])
+                              if isinstance(value, (int, float))
+                              else np.linspace(*value))
+                       for axis, value in ranges.items()}
+        # This next bit is required to deal with arbitrary spectra dimensions
+        values = {axis: array.flatten()  # value lists for each spectra point
+                  for axis, array in zip(axes_coords.keys(),
+                                         np.meshgrid(*axes_coords.values()))}
+
+        Eband = np.array([self.energy(kx, ky, kz)
+                          for kx, ky, kz in zip(values['kx'], values['ky'],
+                                                values['kz'])])
+        intensity = self._intensity(values['kx'], values['Eb'], Eband,
+                                    g_width=g_width, l_width=l_width)
+
+        spectra = intensity.reshape(*shape)
+
+        interp = RegularGridInterpolator((axes_coords['kx'],
+                                          axes_coords['ky'], axes_coords['kz'],
+                                          axes_coords['Eb']),
+                                         spectra)
+
+        return interp
+
+    def _intensity(self, kx, Eb, Eband, g_width=0.4, l_width=0.3):
+        """Return the Intensity at the kx, ky, kz, Eb point
+
+        NOTE: due to the way that we step through ky and kx in
+        self._generate_interpolation we are only worried about the kx value. The
+        other values are taken care of in the Eband parameter
+
+        Parameters
+        ----------
+        kx, Eb, Eband: float or numpy.ndarray.
+            Value(s) of the momentum (in inverse Angstroms), binding energy
+            (in eV) and band energy (in eV) for which to calculate the
+            spectral intensity.
+        g_width, l_width : float, optional.
+            The widths of the gaussian (g_width) and lorentzian(l_width)
+            broadening of the spectra (in eV).
+
+        Returns
+        -------
+        intensity : np.array.
+            Returns the intensity for a range of ($k_{x}$, $k_{y}$, $k_{z}$
+            and $E_{b}$) co-ordinates.
+        """
+        # width increase with increasing band energy
+        added_widths = np.array([0.05 * abs(eband) for eband in Eband])
+        intensity = np.zeros(*kx.shape)
+        # The Gaussian, Lorentzian and Fermi broadening Intensity
+        intensity += (gaussian(Eb, Eband, added_widths + g_width) *
+                      lorentzian(Eb, Eband, added_widths + l_width) *
+                      fermi(Eb))
+
+        return intensity
