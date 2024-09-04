@@ -1,6 +1,5 @@
 import math
 import numpy as np
-import random
 from scipy.interpolate import CubicHermiteSpline, RegularGridInterpolator
 from scipy.ndimage import zoom
 import time
@@ -768,3 +767,216 @@ class Bands:
             print(f'Time for {band} was {round(band_time)} s')
             print(f'Remaining time estimate: {round(band_time * 
                                                     (num_bands - i - 1))} s')
+
+
+class Arpes:
+    """Holds simulated ARPES data and provides spectra extraction methods.
+
+    The aim of this class is to hold together various parameters and methods
+    that allow for a generic simulated 'ARPES' spectra to be generated. It's
+    main function is to use the `detector_image` method to simulate the
+    output of a detector given the number of output parameters that can be
+    changed. It does also provide, through the `self.spectra` method, the
+    ability to generate N-D 'spectra' over the kx, ky, kz (Eph), Eb volume
+    of electron momentum space. This can take longer than the ` detector_image`
+    method to return but will provide a smoother spectra and extends it from
+    2D to up to 4D.
+
+    NOTE: These class objects take a while to initialize (~ 1 minute per band)
+        as we generate a 4D intensity spectra and then fit a 4D function to
+        this. This is done at initialization so that calls to self.spectra()
+        and/or self.detector_image) can return large, high resolution N-D
+        spectra quickly during use.
+
+    Attributes
+    ----------
+    bands : Bands class object.
+        A Bands class object that stores the information for each of the
+        bands in the spectra.
+
+    Methods
+    -------
+    spectra : self.spectra(ranges, noise=0.1, temperature=300)
+        Returns a simulated ND spectra as defined by ranges.
+
+    detector_image : self.detector_image(Eb=0., ky=None, Eph=40, T=300,
+                                         noise=0.015)
+        Returns a simulated detector image for the given input parameters.
+    """
+
+    def __init__(self, symmetry_energies=default_symmetry_energies,
+                 lattice_constants=(2.5, 3.4), g_width=0.3, l_width=0.3):
+        """The initialization method for the ArpesData class.
+
+        Parameters
+        ----------
+        symmetry_energies : {'str':[[float,float,float],[float,float,float]],...}
+            A Dictionary mapping 'band names' to a two element list of 3 element
+            lists providing the binding energies for each of the $k_{z}$ direction
+            high symmetry planes for each band. Each list has binding energies
+            (in eV) for each of the high symmetry points in each $k_{z}$ high
+            symmetry plane. These positions (in-plane coordinates) are:
+                [0,0],
+                [(in-plane lattice constant),
+                 (in_plane lattice constant)/sqrt(3)]
+                [(in-plane lattice constant),0]
+            NOTE: It is recommended, but not required, that the 'band names' follow
+            the structure 'bandx' where x is an integer counting number.
+
+        lattice_constants : float, optional.
+            The lattice constants (in-plane, out-of-plane) for the hexagonal
+            brillouin zone in Angstroms, default is approximately equal to that
+            for graphene (2.5, 3.4).
+        g_width, l_width : float or [float, ...], optional.
+            The widths of the gaussian (g_width) and lorentzian(l_width)
+            broadening of the spectra (in eV). If a list is given then it must
+            have the same length as there are elements in symmetry_energies.
+        """
+        self.bands = Bands(symmetry_energies=symmetry_energies,
+                           lattice_constants=lattice_constants,
+                           g_width=g_width, l_width=l_width)
+
+    def spectra(self, ranges, noise=0.04, temperature=300):
+        """ Returns an N-D spectra for the dataset.
+
+        Generates a spectra for each band based on the input from 'ranges'
+        and with random noise at the level given by 'noise' and the
+        temperature given by 'temperature (which is used to apply the
+        intensity drop across the Fermi level). Sums all 'band' spectra
+        together and returns the result.
+
+        Parameters
+        ----------
+        ranges : {'kx': float or (start, stop, num_steps),
+                  'ky': float or (start, stop, num_steps),
+                  'kz' or 'Eph': float or (start, stop, num_steps),
+                  'Eb': float or (start, stop, num_steps)}
+            A Dictionary providing the constant value, if float, or a
+            (start, stop num_steps) tuple, if a range of values is required,
+            for each of the potential axes of an ARPES spectra. momentum
+            values are in inverse Angstroms and the energies are in eV. If
+            using photon energy ('Eph') instead of kz then the function
+            perpendicular_momentum is used to make the conversion.
+        noise : float, optional.
+            The noise level for the returned spectra.
+        temperature : float, optional.
+            The temperature of the sample (in K) used to generate the intensity
+            drop across the Fermi level.
+
+        Returns
+        -------
+        intensity : numpy.ndarray.
+            A numpy.ndarray holding the given N-D spectra.
+        axes_coords : {'kx': numpy.ndarray, 'ky': numpy.ndarray,
+                       'kz': numpy.ndarray, 'Eb': numpy.ndarray}.
+            The constant value, or range of values, for each of the potential
+            spectral axes ($k_{x}$,$k_{y}$,$k_{z}$ and $E_{b}$)
+        """
+
+        band_names = [x for x in self.bands.__dir__()
+                      if not x.startswith(('_',))]
+
+        band_attr = getattr(self.bands, band_names[0])
+        intensity, axes_coords = band_attr.spectra(ranges=ranges, noise=noise,
+                                                   temperature=temperature)
+
+        for i in range(1, len(band_names)):
+            band_attr = getattr(self.bands, band_names[i])
+            temp, _ = band_attr.spectra(ranges=ranges, noise=noise,
+                                        temperature=temperature)
+            intensity = intensity + temp
+
+        intensity /= len(band_names)
+
+        return intensity, axes_coords
+
+    def detector_image(self, Eb=0., ky=None, Eph=40, T=300, noise=0.015):
+        """Returns a 'detector image' for the given operating parameters.
+
+        Uses the `self.spectra` method to simulate detector images, assuming
+        a momentum microscope energy analyzer (i.e. can return either
+        Eb vs kx and kx vs ky images). In order to reduce the time taken
+        to generate the spectra it calls `self.spectra` with a small number
+        of points along each required axis (currently 90) and then uses
+        `scipy.ndimage.zoom`, with an order of 3, to increase the pixel count.
+        This reduces the return time from minutes to ~ 250ms which allows this
+        method to be used in a 'simulated beamline' with an artificially fast
+        acquisition time. Spectra are however less 'smooth' as a result, for
+        cases where the increased return time is not an issue use
+        `self.spectra` instead.
+
+        NOTES: Assumes a camera resolution of 1080x720
+
+        ToDo: Consider adding a 'clip' kwarg that simulates over-exposing
+        the detector.
+
+        Parameters
+        ----------
+        Eb : float or [float, float], optional.
+            Binding energy to be used, in eV. If 'ky' is provided then the
+            image returned is kx vs Eb, otherwise it is kx vs ky. If 'ky'
+            is given the 'Eb' can optionally be provided as a start/ stop
+            energy tuple/list otherwise -12 to 0.5 eV energy range is used.
+        Eph : float, optional.
+            Photon energy used for the measurement, in eV.
+        ky : float, optional.
+            ky direction momentum value to be used, if not given, or `None`,
+            then a kx vs Eb plot is returned. See Eb description for details
+            of how to specify the energy range for the kx vs Eb plot.
+        T : float, optional.
+            Sample temperature, in K, for the measurement, which adjusts the
+            Fermi-level width of the returned data.
+        noise : float, optional.
+            The signal to noise ratio for the plot, default is 0.015. This
+            can be adjusted to simulate different 'exposure times' of the
+            detector.
+        """
+
+        resolution = [720, 1080]  # can be updated to any 16x9 resolution
+        # If a ratio other than 16x9 is required the ranges below
+        # will need updating as will the size of the 'added_range'.
+
+        if isinstance(ky, (float, int)):  # if a constant ky image is requested.
+            # create non-used detector regions with k range>k horizon(2).
+            ranges = {'kx': [-2.3, 2.3, 90], 'ky': ky, 'Eph': Eph}
+            if isinstance(Eb, (list, tuple)):
+                ranges['Eb'] = [*Eb, 90]  # start finish tuple
+            else:
+                ranges['Eb'] = [12, -0.5, 90]
+            # generate the left/right detector region not without spectra.
+            added_range = noise * 0.2 * np.random.rand(90, 20) / 2
+
+        else:  # if a constant Eb image is requested
+            # create non-used detector regions with k range>k horizon(2).
+            ranges = {'kx': [-2.3, 2.3, 90], 'ky': [-2.3, 2.3, 90],
+                      'Eb': Eb, 'Eph': Eph}
+            # generate the left/right detector region not without spectra.
+            added_range = noise * 0.2 * np.random.rand(90, 35) / 2
+
+        # generate the spectra.
+        image, axes_coords = self.spectra(ranges, temperature=T,
+                                          noise=noise)
+        # add the left/right regions
+        image = np.hstack((added_range, image, added_range))
+
+        # Update the axes_coords to the new number of points
+        axes_coords['kx'] = np.linspace(ranges['kx'][0],
+                                        ranges['kx'][1],
+                                        resolution[0])
+
+        # update the y axis to the new range/number of points
+        if isinstance(ky, (float, int)):  # if a constant ky image is requested.
+            dE = (ranges['Eb'][1] - ranges['Eb'][0]) * 2 / 9
+            axes_coords['Eb'] = np.linspace(ranges['Eb'][0] - dE,
+                                            ranges['Eb'][1] + dE,
+                                            resolution[1])
+        else:  # if a constant Eb is requested.
+            dkx = (ranges['ky'][1] - ranges['ky'][0]) * 3.5 / 9
+            axes_coords['ky'] = np.linspace(ranges['ky'][0] - dkx,
+                                            ranges['ky'][1] + dkx,
+                                            resolution[0])
+
+        # Resize to the required resolution.
+        image = zoom(image, round(resolution[0] / 90), order=3)
+
+        return image, axes_coords
