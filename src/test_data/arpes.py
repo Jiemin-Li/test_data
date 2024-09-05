@@ -692,12 +692,6 @@ class Band:
         return intensity
 
 
-default_symmetry_energies = {'band1': [[-2, 3, 2], [-3, 7, 6]],
-                             'band2': [[1, 9, 10], [2, 10, 6]],
-                             'band3': [[10, -1, 0], [10, 2, 3]],
-                             'band4': [[5.5, 2, 4], [6, 2, 0]]}
-
-
 class Bands:
     """A sub-class that holds information about a set of bands.
 
@@ -767,6 +761,12 @@ class Bands:
             print(f'Time for {band} was {round(band_time)} s')
             print(f'Remaining time estimate: {round(band_time * 
                                                     (num_bands - i - 1))} s')
+
+
+default_symmetry_energies = {'band1': [[-2, 3, 2], [-3, 7, 6]],
+                             'band2': [[1, 9, 10], [2, 10, 6]],
+                             'band3': [[10, -1, 0], [10, 2, 3]],
+                             'band4': [[5.5, 2, 4], [6, 2, 0]]}
 
 
 class Arpes:
