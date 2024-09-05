@@ -72,7 +72,7 @@ def reduce_to_firstBZ(coords, lattice_constants=(2.5, 3.4)):
 
         lattice_constants = (lattice_constants,)
 
-    BZ_size = (2 * math.pi / lattice_constants[0]) * (1 / 2)  # half the recip. constant.
+    BZ_size = (2 * math.pi / lattice_constants[0]) * (1 / 2)
 
     # primitive translation vectors for hexagonal BZ
     translation_vectors = [[2 * BZ_size, 0], [BZ_size, BZ_size * np.sqrt(3)]]
@@ -151,7 +151,7 @@ def generate_symmetry_lines(symmetry_point_energies, lattice_constant=2.5):
 
     """
 
-    BZ_size = (2 * math.pi / lattice_constant) * (1 / 2)  # half the recip. constant.
+    BZ_size = (2 * math.pi / lattice_constant) * (1 / 2)
     symmetry_points = [[0., 0.],
                        [BZ_size, BZ_size / np.sqrt(3)],
                        [BZ_size, 0.]]
@@ -231,7 +231,7 @@ def generate_symmetry_lines(symmetry_point_energies, lattice_constant=2.5):
 
         return return_function
 
-    # Generate the polynomials along the high symmetry lines of one symetry section.
+    # Generate the polynomials along the high symmetry lines.
     symmetry_lines = []
     for i in range(1, 3):
         coef = np.polyfit(*zip((symmetry_points[i - 1][1],
@@ -810,18 +810,19 @@ class Arpes:
 
         Parameters
         ----------
-        symmetry_energies : {'str':[[float,float,float],[float,float,float]],...}
+        symmetry_energies : {'str':[[float,float,float],[float,float,float]],..}
             A Dictionary mapping 'band names' to a two element list of 3 element
-            lists providing the binding energies for each of the $k_{z}$ direction
-            high symmetry planes for each band. Each list has binding energies
-            (in eV) for each of the high symmetry points in each $k_{z}$ high
-            symmetry plane. These positions (in-plane coordinates) are:
+            lists providing the binding energies for each of the $k_{z}$
+            direction high symmetry planes for each band. Each list has binding
+            energies (in eV) for each of the high symmetry points in each
+            $k_{z}$ high symmetry plane. These positions (in-plane coordinates)
+            are:
                 [0,0],
                 [(in-plane lattice constant),
                  (in_plane lattice constant)/sqrt(3)]
                 [(in-plane lattice constant),0]
-            NOTE: It is recommended, but not required, that the 'band names' follow
-            the structure 'bandx' where x is an integer counting number.
+            NOTE: It is recommended, but not required, that the 'band names'
+            follow the structure 'bandx' where x is an integer counting number.
 
         lattice_constants : float, optional.
             The lattice constants (in-plane, out-of-plane) for the hexagonal
