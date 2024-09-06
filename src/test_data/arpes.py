@@ -891,7 +891,8 @@ class Arpes:
 
         return intensity, axes_coords
 
-    def detector_image(self, Eb=0., ky=None, Eph=40, T=300, noise=0.015):
+    def detector_image(self, Eb=0., ky=None, Eph=40, T=300, noise=0.015,
+                       aspect_ratio='1:1'):
         """Returns a 'detector image' for the given operating parameters.
 
         Uses the `self.spectra` method to simulate detector images, assuming
@@ -931,34 +932,55 @@ class Arpes:
             The signal to noise ratio for the plot, default is 0.015. This
             can be adjusted to simulate different 'exposure times' of the
             detector.
+        aspect_ratio : str
+            A string indicating the aspect ratio, can have values '1:1',
+            '16:9' or '16:10'.
         """
 
-        resolution = [720, 1080]  # can be updated to any 16x9 resolution
-        # If a ratio other than 16x9 is required the ranges below
-        # will need updating as will the size of the 'added_range'.
+        if aspect_ratio == '16:9':
+            resolution = [1080, 1920]  # can be updated to any 16x9 resolution
+            added_points = [20, 35]
+            initial_resolution = [90, 120]
+        elif aspect_ratio == '16:10':
+            resolution = [1200, 1920]
+            added_points = [14, 24]
+            initial_resolution = [80, 100]
+        elif aspect_ratio == '1:1':
+            resolution = [450, 450]
+            added_points = [7, 0]
+            initial_resolution = [90, 76]
+        else:
+            raise ValueError(f'In a call to an ARPES.detector_image method the'
+                             f' aspect_ratio ({aspect_ratio}) was not one of '
+                             f' "16:9", "16:10" or "1:1"')
 
         if isinstance(ky, (float, int)):  # if a constant ky image is requested.
             # create non-used detector regions with k range>k horizon(2).
-            ranges = {'kx': [-2.3, 2.3, 90], 'ky': ky, 'Eph': Eph}
+            ranges = {'kx': [-2.3, 2.3, initial_resolution[0]], 'ky': ky, 'Eph': Eph}
             if isinstance(Eb, (list, tuple)):
-                ranges['Eb'] = [*Eb, 90]  # start finish tuple
+                ranges['Eb'] = [*Eb, initial_resolution[1]]  # start finish tuple
             else:
-                ranges['Eb'] = [12, -0.5, 90]
+                ranges['Eb'] = [12, -0.5, initial_resolution[1]]
             # generate the left/right detector region not without spectra.
-            added_range = noise * 0.2 * np.random.rand(90, 20) / 2
+            added_range = noise * 0.2 * np.random.rand(initial_resolution[0],
+                                                       added_points[0]) / 2
 
         else:  # if a constant Eb image is requested
             # create non-used detector regions with k range>k horizon(2).
-            ranges = {'kx': [-2.3, 2.3, 90], 'ky': [-2.3, 2.3, 90],
+            ranges = {'kx': [-2.3, 2.3, initial_resolution[0]],
+                      'ky': [-2.3, 2.3, initial_resolution[0]],
                       'Eb': Eb, 'Eph': Eph}
             # generate the left/right detector region not without spectra.
-            added_range = noise * 0.2 * np.random.rand(90, 35) / 2
+            if added_points[0]:
+                added_range = noise * 0.2 * np.random.rand(initial_resolution[0],
+                                                           added_points[1]) / 2
 
         # generate the spectra.
         image, axes_coords = self.spectra(ranges, temperature=T,
                                           noise=noise)
         # add the left/right regions
-        image = np.hstack((added_range, image, added_range))
+        if added_points[0]:
+            image = np.hstack((added_range, image, added_range))
 
         # Update the axes_coords to the new number of points
         axes_coords['kx'] = np.linspace(ranges['kx'][0],
@@ -967,17 +989,20 @@ class Arpes:
 
         # update the y axis to the new range/number of points
         if isinstance(ky, (float, int)):  # if a constant ky image is requested.
-            dE = (ranges['Eb'][1] - ranges['Eb'][0]) * 2 / 9
+            dE = ((ranges['Eb'][1] - ranges['Eb'][0]) *
+                  added_points[0]/initial_resolution[0])
             axes_coords['Eb'] = np.linspace(ranges['Eb'][0] - dE,
                                             ranges['Eb'][1] + dE,
                                             resolution[1])
         else:  # if a constant Eb is requested.
-            dkx = (ranges['ky'][1] - ranges['ky'][0]) * 3.5 / 9
-            axes_coords['ky'] = np.linspace(ranges['ky'][0] - dkx,
-                                            ranges['ky'][1] + dkx,
-                                            resolution[0])
+            dky = ((ranges['ky'][1] - ranges['ky'][0]) *
+                   added_points[0]/initial_resolution[0])
+            axes_coords['ky'] = np.linspace(ranges['ky'][0] - dky,
+                                            ranges['ky'][1] + dky,
+                                            resolution[1])
 
         # Resize to the required resolution.
-        image = zoom(image, round(resolution[0] / 90), order=3)
+        image = zoom(image, round(resolution[0] / initial_resolution[0]),
+                     order=3)
 
         return image, axes_coords
