@@ -248,8 +248,6 @@ class SpectralImageGenerator():
                                                        summed_mask)])
         masks.append(final_mask)
 
-        summed_mask += final_mask
-
         normalize_mask = np.zeros(shape)
         for i in range(len(masks)):
             normalize_mask += masks[i]
