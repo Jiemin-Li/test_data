@@ -347,7 +347,7 @@ def fermi(binding_energy, temperature=300, fermi_energy=0, zero_offset=0):
 def perpendicular_momentum(photon_energy, parallel_momentum,
                            binding_energy=0, inner_potential=15,
                            work_function=5):
-    r"""Converts photon energies to perpendicular momentum.
+    """Converts photon energies to perpendicular momentum.
 
     This function converts photon energy (energies) to perpendicular
     momentum(s) using the relationships:
@@ -376,8 +376,9 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     WF = work_function * 1.6E-19  # convert from eV to J
 
     E_k = (Eph - Eb - WF)  # in J
-    theta = np.arcsin(np.abs(k_para) / (A_hbar * np.sqrt(E_k)))  # in rad
-    kz = A_hbar * np.sqrt(E_k * np.cos(theta) ** 2 + V0)  # in m^(-1)
+    theta = np.arcsin(np.where(1 > abs(np.abs(k_para) / (A_hbar*np.sqrt(E_k))),
+                               (np.abs(k_para) / (A_hbar*np.sqrt(E_k))), 1))
+    kz = A_hbar * np.sqrt(E_k * np.cos(theta)**2 + V0)  # in m^(-1)
     kz *= 1E-10  # convert from m^(-1) to Ang^(-1)
 
     return kz
@@ -522,7 +523,8 @@ class Band:
 
         return Eb
 
-    def spectra(self, ranges, noise=0.04, temperature=300):
+    def spectra(self, ranges, noise=0.04, temperature=300,
+                work_function=5, default_Eph=45, max_angle=90):
         """ Returns an N-D spectra for the band.
 
         Generates a spectra for the band based on the input from 'ranges'
@@ -547,6 +549,14 @@ class Band:
         temperature : float, optional.
             The temperature of the sample (in K) used to generate the intensity
             drop across the Fermi level.
+        work_function : float, optional.
+            work function in eV used to determine the photo-emission horizon.
+        default_Eph : float, optional.
+            The photon energy to use in the determination of the photoemission
+            horizon if it isn't included in ranges.
+        max_angle : float, optional.
+            The maximum emission angle, in degrees, to use in the determination
+            of the photoemission horizon.
 
         Returns
         -------
@@ -572,11 +582,16 @@ class Band:
                                          np.meshgrid(*axes_coords.values()))}
         k_para = np.sqrt(np.square(values['kx']) + np.square(values['ky']))
         if 'Eph' in values.keys():
+            E_kin = values['Eph'] - values['Eb'] - work_function
             values['kz'] = perpendicular_momentum(photon_energy=values['Eph'],
                                                   parallel_momentum=k_para,
                                                   binding_energy=values['Eb'])
             _ = values.pop('Eph')  # remove the converted Eph values
-            # print(f'{values['kz'] =}')
+        else:
+            E_kin = default_Eph - values['Eb'] - work_function
+
+        k_para_max = np.sin(np.radians(max_angle)) * 0.5123 * np.sqrt(E_kin)
+        k_para_max = np.where(3.6 > k_para_max, k_para_max, 3.6)
 
         coords = [[x, y, z, E] for x, y, z, E in zip(values['kx'], values['ky'],
                                                      values['kz'], values['Eb'])
@@ -587,15 +602,13 @@ class Band:
 
         # Intensity interpolation and drop off with increased angle
         intensity = self._interpolation(coords) * gaussian(k_para, 0,
-                                                           1.25)
+                                                           k_para_max / 2)
         # add noise with Fermi drop-off.
         intensity += (noise * np.random.rand(*intensity.shape) *
                       fermi(values['Eb'], zero_offset=0.2,
                             temperature=temperature))
         # add k parallel horizon.
-        m = (2 - 1.7) / (0 - 12)
-        c = 2
-        intensity = np.where(k_para <= m * values['Eb'] + c, intensity,
+        intensity = np.where(k_para <= k_para_max, intensity,
                              noise * 0.2 * np.random.rand(*intensity.shape))
         # reshape from 1D to spectra shape
         intensity = intensity.reshape(*shape)
@@ -837,7 +850,7 @@ class Arpes:
                            lattice_constants=lattice_constants,
                            g_width=g_width, l_width=l_width)
 
-    def spectra(self, ranges, noise=0.04, temperature=300):
+    def spectra(self, ranges, noise=0.04, temperature=300, default_Eph=45):
         """ Returns an N-D spectra for the dataset.
 
         Generates a spectra for each band based on the input from 'ranges'
@@ -884,7 +897,8 @@ class Arpes:
         for i in range(1, len(band_names)):
             band_attr = getattr(self.bands, band_names[i])
             temp, _ = band_attr.spectra(ranges=ranges, noise=noise,
-                                        temperature=temperature)
+                                        temperature=temperature,
+                                        default_Eph=default_Eph)
             intensity = intensity + temp
 
         intensity /= len(band_names)
@@ -956,7 +970,7 @@ class Arpes:
 
         if isinstance(ky, (float, int)):  # if a constant ky image is requested.
             # create non-used detector regions with k range>k horizon(2).
-            ranges = {'kx': [-2.3, 2.3, initial_resolution[0]], 'ky': ky, 'Eph': Eph}
+            ranges = {'kx': [-3.8, 3.8, initial_resolution[0]], 'ky': ky, 'Eph': Eph}
             if isinstance(Eb, (list, tuple)):
                 ranges['Eb'] = [*Eb, initial_resolution[1]]  # start finish tuple
             else:
@@ -967,8 +981,8 @@ class Arpes:
 
         else:  # if a constant Eb image is requested
             # create non-used detector regions with k range>k horizon(2).
-            ranges = {'kx': [-2.3, 2.3, initial_resolution[0]],
-                      'ky': [-2.3, 2.3, initial_resolution[0]],
+            ranges = {'kx': [-3.8, 3.8, initial_resolution[0]],
+                      'ky': [-3.8, 3.8, initial_resolution[0]],
                       'Eb': Eb, 'Eph': Eph}
             # generate the left/right detector region not without spectra.
             if added_points[0]:
@@ -990,13 +1004,13 @@ class Arpes:
         # update the y axis to the new range/number of points
         if isinstance(ky, (float, int)):  # if a constant ky image is requested.
             dE = ((ranges['Eb'][1] - ranges['Eb'][0]) *
-                  added_points[0]/initial_resolution[0])
+                  added_points[0] / initial_resolution[0])
             axes_coords['Eb'] = np.linspace(ranges['Eb'][0] - dE,
                                             ranges['Eb'][1] + dE,
                                             resolution[1])
         else:  # if a constant Eb is requested.
             dky = ((ranges['ky'][1] - ranges['ky'][0]) *
-                   added_points[0]/initial_resolution[0])
+                   added_points[0] / initial_resolution[0])
             axes_coords['ky'] = np.linspace(ranges['ky'][0] - dky,
                                             ranges['ky'][1] + dky,
                                             resolution[1])
