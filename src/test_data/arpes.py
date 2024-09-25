@@ -3,6 +3,7 @@ import numpy as np
 from scipy.interpolate import CubicHermiteSpline, RegularGridInterpolator
 from scipy.ndimage import zoom
 import time
+import xarray as xr
 
 
 # Generic helper functions
@@ -384,6 +385,50 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     return kz
 
 
+units_map = {'kx': '$\AA^{-1}$', 'ky': '$\AA^{-1}$', 'kz': '$\AA^{-1}$',
+             'Eb': 'eV', 'Eph': 'eV'}
+
+
+name_map = {'kx': '$k_x$', 'ky': '$k_y$', 'kz': '$k_z$',
+            'Eb': '$E_b$', 'Eph': '$E_{ph}$'}
+
+
+def to_xarray(data, coords):
+    """Converts the spectra from numpy array/dict to an xarray
+    This converts an ND data array and dictionary containing axes coordinates
+    to an xarray.
+
+    Parameters
+    ----------
+    data : numpy.ndarray.
+        A numpy.ndarray holding the given N-D spectra.
+    coords : {'kx': numpy.ndarray, 'ky': numpy.ndarray,
+              'kz': numpy.ndarray, 'Eb': numpy.ndarray}.
+        The constant value, or range of values, for each of the potential
+        spectral axes ($k_{x}$,$k_{y}$,$k_{z}$ and $E_{b}$)
+
+    Returns
+    -------
+    output : xarray.DataArray, default.
+        An xarray.DataArray containing the nd array as well as coordinate
+        information, and long-names and unit information for the dataarray
+        and coordinates.
+    """
+    new_axes = tuple(i for i, v in enumerate(coords.values()) if len(v) == 1)
+    extended_data = np.expand_dims(data, new_axes)
+    output = xr.DataArray(data=extended_data,
+                          dims=[k for k in coords.keys()],
+                          coords=coords,
+                          attrs={'long_name': 'Intensity',
+                                 'units': 'detector counts'})
+
+    for coord in coords.keys():
+        output[coord].attrs['units'] = units_map[coord]
+        output[coord].attrs['long_name'] = name_map[coord]
+
+    return output
+
+
 class Band:
     """Holds information associated with generating specific electron bands.
 
@@ -524,7 +569,8 @@ class Band:
         return Eb
 
     def spectra(self, ranges, noise=0.04, temperature=300,
-                work_function=5, default_Eph=45, max_angle=90):
+                work_function=5, default_Eph=45, max_angle=90,
+                as_xarray=True):
         """ Returns an N-D spectra for the band.
 
         Generates a spectra for the band based on the input from 'ranges'
@@ -557,13 +603,22 @@ class Band:
         max_angle : float, optional.
             The maximum emission angle, in degrees, to use in the determination
             of the photoemission horizon.
+        as_xarray : Bool, optional.
+            Indicates if the returned spectra should be provided as an xarray or
+            as a numpy array and coordinates dictionary.
 
         Returns
         -------
-        intensity : numpy.ndarray.
+        xarray : xarray.DataArray, default.
+            An xarray.DataArray containing the nd array as well as coordinate
+            information, and long-names and unit information for the dataarray
+            and coordinates. If the `as_xarray` kwarg is `False` then the
+            optional intensity and axes_coords numpy arrays described below
+            are returned.
+        intensity : numpy.ndarray, optional.
             A numpy.ndarray holding the given N-D spectra.
         axes_coords : {'kx': numpy.ndarray, 'ky': numpy.ndarray,
-                       'kz': numpy.ndarray, 'Eb': numpy.ndarray}.
+                       'kz': numpy.ndarray, 'Eb': numpy.ndarray}, optional.
             The constant value, or range of values, for each of the potential
             spectral axes ($k_{x}$,$k_{y}$,$k_{z}$ and $E_{b}$)
         """
@@ -613,7 +668,10 @@ class Band:
         # reshape from 1D to spectra shape
         intensity = intensity.reshape(*shape)
 
-        return intensity, axes_coords
+        if as_xarray:
+            return to_xarray(intensity, axes_coords)
+        else:
+            return intensity, axes_coords
 
     def _generate_interpolation(self, ranges, g_width=0.4, l_width=0.3):
         """Returns the interpolation function used for spectra calculations.
@@ -850,7 +908,8 @@ class Arpes:
                            lattice_constants=lattice_constants,
                            g_width=g_width, l_width=l_width)
 
-    def spectra(self, ranges, noise=0.04, temperature=300, default_Eph=45):
+    def spectra(self, ranges, noise=0.04, temperature=300, default_Eph=45,
+                as_xarray=True):
         """ Returns an N-D spectra for the dataset.
 
         Generates a spectra for each band based on the input from 'ranges'
@@ -876,12 +935,24 @@ class Arpes:
         temperature : float, optional.
             The temperature of the sample (in K) used to generate the intensity
             drop across the Fermi level.
+        default_Eph : float, optional.
+            The photon energy to use in the determination of the photoemission
+            horizon if it isn't included in ranges.
+        as_xarray : Bool, optional.
+            Indicates if the returned spectra should be provided as an xarray
+            or as a numpy array and coordinates dictionary.
 
         Returns
         -------
-        intensity : numpy.ndarray.
+        xarray : xarray.DataArray, default.
+            An xarray.DataArray containing the nd array as well as coordinate
+            information, and long-names and unit information for the dataarray
+            and coordinates. If the `as_xarray` kwarg is `False` then the
+            optional intensity and axes_coords numpy arrays described below
+            are returned.
+        intensity : numpy.ndarray, optional.
             A numpy.ndarray holding the given N-D spectra.
-        axes_coords : {'kx': numpy.ndarray, 'ky': numpy.ndarray,
+        axes_coords, optional : {'kx': numpy.ndarray, 'ky': numpy.ndarray,
                        'kz': numpy.ndarray, 'Eb': numpy.ndarray}.
             The constant value, or range of values, for each of the potential
             spectral axes ($k_{x}$,$k_{y}$,$k_{z}$ and $E_{b}$)
@@ -892,18 +963,23 @@ class Arpes:
 
         band_attr = getattr(self.bands, band_names[0])
         intensity, axes_coords = band_attr.spectra(ranges=ranges, noise=noise,
-                                                   temperature=temperature)
+                                                   temperature=temperature,
+                                                   as_xarray=False)
 
         for i in range(1, len(band_names)):
             band_attr = getattr(self.bands, band_names[i])
             temp, _ = band_attr.spectra(ranges=ranges, noise=noise,
                                         temperature=temperature,
-                                        default_Eph=default_Eph)
+                                        default_Eph=default_Eph,
+                                        as_xarray=False)
             intensity = intensity + temp
 
         intensity /= len(band_names)
 
-        return intensity, axes_coords
+        if as_xarray:
+            return to_xarray(intensity, axes_coords)
+        else:
+            return intensity, axes_coords
 
     def detector_image(self, Eb=0., ky=None, Eph=40, T=300, noise=0.015,
                        aspect_ratio='1:1'):
@@ -991,7 +1067,7 @@ class Arpes:
 
         # generate the spectra.
         image, axes_coords = self.spectra(ranges, temperature=T,
-                                          noise=noise)
+                                          noise=noise, as_xarray=False)
         # add the left/right regions
         if added_points[0]:
             image = np.hstack((added_range, image, added_range))
