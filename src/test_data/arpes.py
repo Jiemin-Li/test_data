@@ -2,6 +2,7 @@ import math
 import numpy as np
 from scipy.interpolate import CubicHermiteSpline, RegularGridInterpolator
 from scipy.ndimage import zoom
+import scipy.constants as sci_const
 import time
 import xarray as xr
 
@@ -133,7 +134,7 @@ def generate_symmetry_lines(symmetry_point_energies, lattice_constant=2.5):
 
     Parameters
     ----------
-    symmetry_point_energies : [float, float, float]
+    symmetry_point_energies : [float, float, float], in the unit of eV.
         Binding energies of the [0,0], [lattice_constant,
         lattice_constant/sqrt(3)] and [lattice_constant,0] high symmetry
         points.
@@ -328,7 +329,7 @@ def fermi(binding_energy, temperature=300, fermi_energy=0, zero_offset=0):
     fermi_energy : float,
         The binding energy of the Fermi level (in eV), default is 0.
     zero_offset : float,
-        The 'zero' offset to shift the zero values by, default is 0.
+        The 'zero' offset to shift the zero values by (in eV), default is 0.
 
     Returns
     -------
@@ -337,7 +338,7 @@ def fermi(binding_energy, temperature=300, fermi_energy=0, zero_offset=0):
 
     """
 
-    kb = 8.617333262e-05  # Boltzmans constant in eV/K
+    kb = sci_const.Boltzmann/sci_const.elementary_charge  # Boltzmans constant in eV/K
     amplitude = 1 / (np.exp(-(binding_energy - fermi_energy) / (kb *
                                                                 temperature))+1)
     amplitude = (amplitude + zero_offset) / (1 + zero_offset)
@@ -366,9 +367,9 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
 
     """
 
-    h_bar = 1.054571817E-34  # in J.s
-    m_e = 9.1093837E-31  # in Kg or J.s^2/m^2 (E=mc^2)
-    A_hbar = np.sqrt(2 * m_e) / h_bar  # in J^(-1/2).m^(-1)
+    # h_bar = sci_const.hbar  # in J.s
+    # m_e = sci_const.m_e  # in Kg or J.s^2/m^2 (E=mc^2)
+    A_hbar = np.sqrt(2 * sci_const.m_e) / sci_const.hbar  # in J^(-1/2).m^(-1)
 
     Eph = photon_energy * 1.6E-19  # convert from eV to J
     k_para = parallel_momentum*1E10  # convert from Ang to m
@@ -518,7 +519,7 @@ class Band:
 
     def energy(self, kx, ky, kz):
         """
-        Returns the binding energy for the $k_{x}$, $k_{y}$, $k_{z}$ values.
+        Returns the binding energy in eV for the $k_{x}$, $k_{y}$, $k_{z}$ values.
 
         Used to provide the energy of the band at the given momentum
         co-ordinates.
@@ -530,7 +531,7 @@ class Band:
 
         Returns
         -------
-        Eb : float
+        Eb : float, in the unit of eV.
             The binding energy for the given kx, ky, kz value.
         """
 
@@ -593,12 +594,12 @@ class Band:
         noise : float, optional.
             The noise level for the returned spectra.
         temperature : float, optional.
-            The temperature of the sample (in K) used to generate the intensity
+            The temperature (in K) of the sample (in K) used to generate the intensity
             drop across the Fermi level.
         work_function : float, optional.
             work function in eV used to determine the photo-emission horizon.
         default_Eph : float, optional.
-            The photon energy to use in the determination of the photoemission
+            The photon energy (in eV) to use in the determination of the photoemission
             horizon if it isn't included in ranges.
         max_angle : float, optional.
             The maximum emission angle, in degrees, to use in the determination
@@ -692,8 +693,8 @@ class Band:
             values are in inverse Angstroms and the energies are in eV.
 
         g_width, l_width : float, optional.
-            The widths of the gaussian (g_width) and lorentzian(l_width)
-            broadening of the spectra (in eV) returned by self.spectra(...).
+            The widths (in eV) of the gaussian (g_width) and lorentzian(l_width)
+            broadening of the spectra returned by self.spectra(...).
 
         Returns
         -------
@@ -743,8 +744,8 @@ class Band:
             (in eV) and band energy (in eV) for which to calculate the
             spectral intensity.
         g_width, l_width : float, optional.
-            The widths of the gaussian (g_width) and lorentzian(l_width)
-            broadening of the spectra (in eV).
+            The widths (in eV) of the gaussian (g_width) and lorentzian(l_width)
+            broadening of the spectra.
 
         Returns
         -------
@@ -786,8 +787,8 @@ class Bands:
             brillouin zone in Angstroms, default is approximately equal to that
             for graphene (2.5, 3.4).
     g_width, l_width : float or [float, ...], optional.
-            The widths of the gaussian (g_width) and lorentzian(l_width)
-            broadening of the spectra (in eV). If a list is given then it must
+            The widths (in eV) of the gaussian (g_width) and lorentzian(l_width)
+            broadening of the spectra. If a list is given then it must
             have the same length as there are elements in symmetry_energies.
 
     Attributes
@@ -933,10 +934,10 @@ class Arpes:
         noise : float, optional.
             The noise level for the returned spectra.
         temperature : float, optional.
-            The temperature of the sample (in K) used to generate the intensity
+            The temperature (in K) of the sample (in K) used to generate the intensity
             drop across the Fermi level.
         default_Eph : float, optional.
-            The photon energy to use in the determination of the photoemission
+            The photon energy (in eV) to use in the determination of the photoemission
             horizon if it isn't included in ranges.
         as_xarray : Bool, optional.
             Indicates if the returned spectra should be provided as an xarray
