@@ -347,8 +347,8 @@ def fermi(binding_energy, temperature=300, fermi_energy=0, zero_offset=0):
 
 
 def perpendicular_momentum(photon_energy, parallel_momentum,
-                           binding_energy=0, inner_potential=15,
-                           work_function=5):
+                           binding_energy=0.0, inner_potential=15.0,
+                           work_function=5.0):
     """Converts photon energies to perpendicular momentum.
 
     This function converts photon energy (energies) to perpendicular
@@ -519,7 +519,8 @@ class Band:
 
     def energy(self, kx, ky, kz):
         """
-        Returns the binding energy in eV for the $k_{x}$, $k_{y}$, $k_{z}$ values.
+        Returns the binding energy in eV for the $k_{x}$, $k_{y}$, $k_{z}$
+        values.
 
         Used to provide the energy of the band at the given momentum
         co-ordinates.
@@ -594,13 +595,13 @@ class Band:
         noise : float, optional.
             The noise level for the returned spectra.
         temperature : float, optional.
-            The temperature (in K) of the sample (in K) used to generate the intensity
-            drop across the Fermi level.
+            The temperature (in K) of the sample (in K) used to generate the
+            intensity drop across the Fermi level.
         work_function : float, optional.
             work function in eV used to determine the photo-emission horizon.
         default_Eph : float, optional.
-            The photon energy (in eV) to use in the determination of the photoemission
-            horizon if it isn't included in ranges.
+            The photon energy (in eV) to use in the determination of the
+            photoemission horizon if it isn't included in ranges.
         max_angle : float, optional.
             The maximum emission angle, in degrees, to use in the determination
             of the photoemission horizon.
@@ -934,11 +935,11 @@ class Arpes:
         noise : float, optional.
             The noise level for the returned spectra.
         temperature : float, optional.
-            The temperature (in K) of the sample (in K) used to generate the intensity
-            drop across the Fermi level.
+            The temperature (in K) of the sample (in K) used to generate the
+            intensity drop across the Fermi level.
         default_Eph : float, optional.
-            The photon energy (in eV) to use in the determination of the photoemission
-            horizon if it isn't included in ranges.
+            The photon energy (in eV) to use in the determination of the
+            photoemission horizon if it isn't included in ranges.
         as_xarray : Bool, optional.
             Indicates if the returned spectra should be provided as an xarray
             or as a numpy array and coordinates dictionary.
@@ -1047,9 +1048,10 @@ class Arpes:
 
         if isinstance(ky, (float, int)):  # if a constant ky image is requested.
             # create non-used detector regions with k range>k horizon(2).
-            ranges = {'kx': [-3.8, 3.8, initial_resolution[0]], 'ky': ky, 'Eph': Eph}
+            ranges = {'kx': [-3.8, 3.8, initial_resolution[0]], 'ky': ky,
+                      'Eph': Eph}
             if isinstance(Eb, (list, tuple)):
-                ranges['Eb'] = [*Eb, initial_resolution[1]]  # start finish tuple
+                ranges['Eb'] = [*Eb, initial_resolution[1]] # start finish tuple
             else:
                 ranges['Eb'] = [12, -0.5, initial_resolution[1]]
             # generate the left/right detector region not without spectra.
@@ -1063,8 +1065,8 @@ class Arpes:
                       'Eb': Eb, 'Eph': Eph}
             # generate the left/right detector region not without spectra.
             if added_points[0]:
-                added_range = noise * 0.2 * np.random.rand(initial_resolution[0],
-                                                           added_points[1]) / 2
+                added_range = noise * 0.2 * np.random.rand(initial_resolution[0]
+                                                           ,added_points[1]) / 2
 
         # generate the spectra.
         image, axes_coords = self.spectra(ranges, temperature=T,
