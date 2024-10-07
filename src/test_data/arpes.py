@@ -1,4 +1,6 @@
 import math
+from tabnanny import check
+
 import numpy as np
 from scipy.interpolate import CubicHermiteSpline, RegularGridInterpolator
 from scipy.ndimage import zoom
@@ -366,6 +368,30 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     $\Phi$ is the work function.
 
     """
+
+    check_data_type = [isinstance(i, (float, int))
+                       for i in [photon_energy, parallel_momentum,
+                                 binding_energy]]
+
+    check_data_len = []
+    if not np.all(check_data_type):
+        for i in [photon_energy, parallel_momentum, binding_energy]:
+            if isinstance(i,(np.ndarray)):
+                if len(np.shape(i))>1:
+                    raise ValueError(f'The shape of {i} can not be '
+                                     f'larger than 1!')
+                else:
+                    check_data_len.append(len(i))
+            elif isinstance(i,(list)):
+                check_data_len.append(len(i))
+            else:
+                pass
+        if len(check_data_len)>1:
+            if not all(x == check_data_len[0] for x in check_data_len):
+                raise ValueError('The sizes of arguments are different!!!')
+        else:
+            pass
+
 
     # h_bar = sci_const.hbar  # in J.s
     # m_e = sci_const.m_e  # in Kg or J.s^2/m^2 (E=mc^2)
