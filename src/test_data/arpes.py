@@ -381,9 +381,11 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
                     raise ValueError(f'The shape of {i} can not be '
                                      f'larger than 1!')
                 else:
-                    check_data_len.append(len(i))
+                    if len(i)>1:
+                        check_data_len.append(len(i))
             elif isinstance(i,(list)):
-                check_data_len.append(len(i))
+                if len(i)>1:
+                    check_data_len.append(len(i))
             else:
                 pass
         if len(check_data_len)>1:
