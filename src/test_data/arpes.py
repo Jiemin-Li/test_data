@@ -1,13 +1,10 @@
 import math
-# from tabnanny import check
-
 import numpy as np
 from scipy.interpolate import CubicHermiteSpline, RegularGridInterpolator
 from scipy.ndimage import zoom
 import scipy.constants as sci_const
 import time
 import xarray as xr
-
 
 # Generic helper functions
 
