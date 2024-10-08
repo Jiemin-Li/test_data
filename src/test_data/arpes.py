@@ -1,5 +1,5 @@
 import math
-from tabnanny import check
+# from tabnanny import check
 
 import numpy as np
 from scipy.interpolate import CubicHermiteSpline, RegularGridInterpolator
@@ -368,31 +368,21 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     $\Phi$ is the work function.
 
     """
+    check_data_len = [len(value)
+                      if (isinstance(value, (np.ndarray)) and
+                          len(value.shape) == 1)
+                      else False
+                      for value in [inner_value for inner_value in
+                                    [parallel_momentum, photon_energy,
+                                     binding_energy]
+                                    if not isinstance(inner_value,
+                                                      (float, int))]]
 
-    check_data_type = [isinstance(i, (float, int))
-                       for i in [photon_energy, parallel_momentum,
-                                 binding_energy]]
+    if not np.all(check_data_len):
+        raise ValueError(f'Some string about not being an int, float or 1D numpy array')
+    elif check_data_len[:-1] != check_data_len[1:]:
+        raise ValueError(f'Some string about all numpy arrays not being the same length')
 
-    check_data_len = []
-    if not np.all(check_data_type):
-        for i in [photon_energy, parallel_momentum, binding_energy]:
-            if isinstance(i,(np.ndarray)):
-                if len(np.shape(i))>1:
-                    raise ValueError(f'The shape of {i} can not be '
-                                     f'larger than 1!')
-                else:
-                    if len(i)>1:
-                        check_data_len.append(len(i))
-            elif isinstance(i,(list)):
-                if len(i)>1:
-                    check_data_len.append(len(i))
-            else:
-                pass
-        if len(check_data_len)>1:
-            if not all(x == check_data_len[0] for x in check_data_len):
-                raise ValueError('The sizes of arguments are different!!!')
-        else:
-            pass
 
 
     # h_bar = sci_const.hbar  # in J.s
