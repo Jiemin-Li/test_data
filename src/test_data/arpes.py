@@ -6,7 +6,6 @@ import scipy.constants as sci_const
 import time
 import xarray as xr
 
-
 # Generic helper functions
 
 def generate1Dpoly(zeros):
@@ -366,6 +365,25 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     $\Phi$ is the work function.
 
     """
+    check_data_len = [len(value)
+                      if (isinstance(value, (np.ndarray)) and
+                          len(value.shape) == 1)
+                      else False
+                      for value in [inner_value for inner_value in
+                                    [parallel_momentum, photon_energy,
+                                     binding_energy]
+                                    if not isinstance(inner_value,
+                                                      (float, int))]]
+
+    if not np.all(check_data_len):
+        raise ValueError(f'The input must be an int, float or 1D numpy array!')
+    else:
+        check_data_size = [x for x in check_data_len if (x!=1)]
+        if check_data_size[1:] != check_data_size[:-1]:
+            raise ValueError(f'The length of inputs must be the same if their '
+                             f'length is larger than 1! ')
+
+
 
     # h_bar = sci_const.hbar  # in J.s
     # m_e = sci_const.m_e  # in Kg or J.s^2/m^2 (E=mc^2)
@@ -378,7 +396,7 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     WF = work_function * 1.6E-19  # convert from eV to J
 
     E_k = (Eph - Eb - WF)  # in J
-    theta = np.arcsin(np.where(1 > abs(np.abs(k_para) / (A_hbar*np.sqrt(E_k))),
+    theta = np.arcsin(np.where(1 > np.abs(np.abs(k_para) / (A_hbar*np.sqrt(E_k))),
                                (np.abs(k_para) / (A_hbar*np.sqrt(E_k))), 1))
     kz = A_hbar * np.sqrt(E_k * np.cos(theta)**2 + V0)  # in m^(-1)
     kz *= 1E-10  # convert from m^(-1) to Ang^(-1)
