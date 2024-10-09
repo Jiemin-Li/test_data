@@ -363,7 +363,26 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     $\k_{perpendicular}$ are the surface parallel and perpendicular momentum,
     $E_{ph}$ is the photon energy, $E_{b}$ is the electron binding energy and
     $\Phi$ is the work function.
+    Parameters
+    ----------
+    photon_energy : integers, floats or 1D numpy.ndarray,
+        The photon energy (or energies) in eV.
+    parallel_momentum : integers, floats or 1D numpy.ndarray,
+        The parallel momentum in the unit of the inverse of angstrom.
+    binding_energy : integers, floats or 1D numpy.ndarray,
+        The binding energy (or energies) in eV.
+    For above three parameters, if two or three of them are 1D numpy.ndarray
+    with a length larger than 1, their length then must be the same.
 
+    inner_potential: integers or floats
+        The inner potential in eV.
+    work_function: integers or floats
+        The work function in eV.
+
+    Returns
+    -------
+    $k_z$ : 1D numpy.ndarray
+        The perpendicular momentum in the unit of the inverse of angstrom.
     """
     check_data_len = [len(value)
                       if (isinstance(value, (np.ndarray)) and
@@ -378,12 +397,10 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     if not np.all(check_data_len):
         raise ValueError(f'The input must be an int, float or 1D numpy array!')
     else:
-        check_data_size = [x for x in check_data_len if (x!=1)]
-        if check_data_size[1:] != check_data_size[:-1]:
-            raise ValueError(f'The length of inputs must be the same if their '
-                             f'length is larger than 1! ')
-
-
+        check_data_len = list(filter(lambda a: a!=1,check_data_len))
+        if check_data_len[1:] != check_data_len[:-1]:
+            raise ValueError(f'The length of inputs must be the same if '
+                             f'their length is larger than 1!')
 
     # h_bar = sci_const.hbar  # in J.s
     # m_e = sci_const.m_e  # in Kg or J.s^2/m^2 (E=mc^2)
