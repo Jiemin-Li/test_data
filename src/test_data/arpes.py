@@ -365,21 +365,23 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
     $\Phi$ is the work function.
     Parameters
     ----------
-    photon_energy : float or 1D numpy.ndarray,
+    photon_energy : integers, floats or 1D numpy.ndarray,
         The photon energy (or energies) in eV.
-    parallel_momentum : float or 1D numpy.ndarray,
+    parallel_momentum : integers, floats or 1D numpy.ndarray,
         The parallel momentum in the unit of the inverse of angstrom.
-    binding_energy : float or 1D numpy.ndarray,
+    binding_energy : integers, floats or 1D numpy.ndarray,
         The binding energy (or energies) in eV.
+    For above three parameters, if two or three of them are 1D numpy.ndarray
+    with a length larger than 1, their length then must be the same.
 
-    inner_potential: float or 1D numpy.ndarray
+    inner_potential: integers or floats
         The inner potential in eV.
-    work_function: float or 1D numpy.ndarray
+    work_function: integers or floats
         The work function in eV.
 
     Returns
     -------
-    $k_z$ : float or 1D numpy.ndarray,
+    $k_z$ : 1D numpy.ndarray
         The perpendicular momentum in the unit of the inverse of angstrom.
     """
     check_data_len = [len(value)
