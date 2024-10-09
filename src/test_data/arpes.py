@@ -379,11 +379,10 @@ def perpendicular_momentum(photon_energy, parallel_momentum,
         raise ValueError(f'The input must be an int, float or 1D numpy array!')
     else:
         check_data_size = [x for x in check_data_len if (x!=1)]
-        if check_data_size[1:] != check_data_size[:-1]:
-            raise ValueError(f'The length of inputs must be the same if their '
-                             f'length is larger than 1! ')
-
-
+        if len(check_data_size)>1:
+            if check_data_size[1:] != check_data_size[:-1]:
+                raise ValueError(f'The length of inputs must be the same if '
+                                 f'their length is larger than 1!')
 
     # h_bar = sci_const.hbar  # in J.s
     # m_e = sci_const.m_e  # in Kg or J.s^2/m^2 (E=mc^2)
